@@ -1,0 +1,34 @@
+Name:                hopenstack
+Version:             0.1.0.0
+Synopsis:            OpenStack API client bindings
+-- Description:         
+Homepage:            https://github.com/NicolasT/hopenstack
+Category:            Network
+
+Author:              Nicolas Trangez
+Copyright:           (c) 2015, Nicolas Trangez
+Maintainer:          ikke@nicolast.be
+License:             BSD2
+License-File:        LICENSE
+
+Build-Type:          Simple
+Cabal-Version:       >=1.10
+
+Library
+  Exposed-Modules:     Network.OpenStack.Client.Wreq
+                     , Network.OpenStack.Keystone
+  Other-Modules:       Network.OpenStack.Client
+  Build-Depends:       base >= 4.7 && < 4.8
+                     , aeson >= 0.8 && < 0.9
+                     , text >= 1.2 && < 1.3
+  Hs-Source-Dirs:      src
+  Default-Language:    Haskell2010
+  Ghc-Options:         -Wall
+
+Executable demo
+  Main-Is:             demo.hs
+  Build-Depends:       base >= 4.7 && < 4.8
+                     , text >= 1.2 && < 1.3
+                     , hopenstack
+  Default-Language:    Haskell2010
+  Ghc-Options:         -Wall
