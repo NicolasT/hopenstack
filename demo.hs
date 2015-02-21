@@ -2,15 +2,14 @@
 
 module Main where
 
-import Data.Text ()
+import Data.Text (pack)
+import System.Environment
 
 import Network.OpenStack.Client.Wreq
 import Network.OpenStack.Keystone
 
 main :: IO ()
 main = do
-    token <- runOperation (createToken domainScope) service request
+    [url, user, pass] <- getArgs
+    token <- runOperation (createToken defaultScope) url (DefaultScopeTokenRequest (pack user) (pack pass))
     print token
-  where
-    service = "http://localhost:5000/v3"
-    request = DomainRequest "nicolas" "pass" "mydomain"

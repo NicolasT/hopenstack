@@ -8,39 +8,36 @@ module Network.OpenStack.Client.Wreq (
       runOperation
     ) where
 
-import Control.Lens hiding (op)
+import Control.Applicative
+import Control.Monad (void)
 import Data.Aeson
 import qualified Network.Wreq as W
 
 import Network.OpenStack.Client
 
-runOperation :: (ToJSON a, FromJSON b) => Handler m a IO b
+runOperation :: (ToJSON a, FromJSON b) => Handler m t a IO b
 runOperation op = case op of
-    OGET -> runGET op
-    OPOST -> runPOST op
-    OPUT -> runPUT op
-    ODELETE -> runDELETE op
+    OGETAnonymous _ _ -> runGETAnonymous op
+    OPOSTAnonymous _ _ -> runPOSTAnonymous op
+    OPUTAnonymous _ _ -> runPUTAnonymous op
+    ODELETEAnonymous _ -> runDELETEAnonymous op
 
-runGET :: FromJSON b => Handler 'GET () IO b
-runGET op url = do
+runGETAnonymous :: FromJSON b => Handler 'GET 'Anonymous () IO b
+runGETAnonymous op@(OGETAnonymous processOptions processResponse) url = do
     let full = url ++ operationSuffix op
-    resp <- W.asJSON =<< W.get full
-    return $ resp ^. W.responseBody
+    processResponse <$> (W.asJSON =<< W.getWith (processOptions W.defaults) full)
 
-runPOST :: (ToJSON a, FromJSON b) => Handler 'POST a IO b
-runPOST op url a = do
+runPOSTAnonymous :: (ToJSON a, FromJSON b) => Handler 'POST 'Anonymous a IO b
+runPOSTAnonymous op@(OPOSTAnonymous processOptions processResponse) url a = do
     let full = url ++ operationSuffix op
-    resp <- W.asJSON =<< W.post full (toJSON a)
-    return $ resp ^. W.responseBody
+    processResponse <$> (W.asJSON =<< W.postWith (processOptions W.defaults) full (toJSON a))
 
-runPUT :: (ToJSON a, FromJSON b) => Handler 'PUT a IO b
-runPUT op url a = do
+runPUTAnonymous :: (ToJSON a, FromJSON b) => Handler 'PUT 'Anonymous a IO b
+runPUTAnonymous op@(OPUTAnonymous processOptions processResponse) url a = do
     let full = url ++ operationSuffix op
-    resp <- W.asJSON =<< W.put full (toJSON a)
-    return $ resp ^. W.responseBody
+    processResponse <$> (W.asJSON =<< W.putWith (processOptions W.defaults) full (toJSON a))
 
-runDELETE :: Handler 'DELETE () IO ()
-runDELETE op url = do
+runDELETEAnonymous :: Handler 'DELETE 'Anonymous () IO ()
+runDELETEAnonymous op@(ODELETEAnonymous processOptions) url = do
     let full = url ++ operationSuffix op
-    _ <- W.delete full
-    return ()
+    void $ W.deleteWith (processOptions W.defaults) full

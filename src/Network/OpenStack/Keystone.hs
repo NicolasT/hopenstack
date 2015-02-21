@@ -7,21 +7,24 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Network.OpenStack.Keystone (
-      DefaultRequest(..)
-    , DomainRequest(..)
+      DefaultScopeTokenRequest(..)
+    , DomainScopeTokenRequest(..)
     , createToken
     , defaultScope
     , domainScope
     , Token, unToken
     ) where
 
+import Control.Lens hiding ((.=))
 import Data.Aeson
+import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Data.Typeable
+import qualified Network.Wreq as W
 
 import Network.OpenStack.Client
 
-data ScopeIdentifier = Default | Domain
+data ScopeIdentifier = DefaultScope | DomainScope
     deriving (Show, Eq, Typeable)
 
 data Scope (s :: ScopeIdentifier) where
@@ -31,33 +34,47 @@ deriving instance Show (Scope s)
 deriving instance Eq (Scope s)
 deriving instance Typeable Scope
 
-defaultScope :: Scope Default
+defaultScope :: Scope DefaultScope
 defaultScope = Scope
 
-domainScope :: Scope Domain
+domainScope :: Scope DomainScope
 domainScope = Scope
 
-data DefaultRequest = DefaultRequest String String
+data DefaultScopeTokenRequest = DefaultScopeTokenRequest { defaultScopeTokenRequestName :: Text
+                                                         , defaultScopeTokenRequestPassword :: Text
+                                                         }
     deriving (Show, Eq, Typeable)
 
-data DomainRequest = DomainRequest Text Text Text
+instance ToJSON DefaultScopeTokenRequest where
+    toJSON request =
+        object [
+            "auth" .= object [
+                "identity" .= object [
+                    "methods" .= [ "password" :: Text ],
+                    "password" .= object [
+                        "user" .= object [
+                            "domain" .= object [
+                                "id" .= ("default" :: Text) ],
+                            "name" .= defaultScopeTokenRequestName request,
+                            "password" .= defaultScopeTokenRequestPassword request
+        ]]]]]
+
+
+data DomainScopeTokenRequest = DomainScopeTokenRequest Text Text Text
     deriving (Show, Eq, Typeable)
 
-instance ToJSON DomainRequest where
-    toJSON (DomainRequest name password domain) = object [ "name" .= name
-                                                         , "password" .= password
-                                                         , "domain" .= domain
-                                                         ]
 
 type family TokenRequest (s :: ScopeIdentifier) where
-    TokenRequest Default = DefaultRequest
-    TokenRequest Domain = DomainRequest
+    TokenRequest DefaultScope = DefaultScopeTokenRequest
+    TokenRequest DomainScope = DomainScopeTokenRequest
 
-newtype Token (s :: ScopeIdentifier) = Token { unToken :: String }
+newtype Token (s :: ScopeIdentifier) = Token { unToken :: ByteString }
     deriving (Show, Eq, Typeable)
 
 instance FromJSON (Token s) where
     parseJSON _ = return (Token "hello")
 
-createToken :: Scope s -> POST "/auth/tokens" (TokenRequest s) (Token s)
-createToken _ = operation
+createToken :: Scope s -> POST "/auth/tokens" Anonymous (TokenRequest s) (Token s)
+createToken _ = operation' id getToken
+  where
+    getToken resp = Token $ resp ^. W.responseHeader "X-Subject-Token"
