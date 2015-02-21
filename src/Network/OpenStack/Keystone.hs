@@ -12,14 +12,13 @@ module Network.OpenStack.Keystone (
     , createToken
     , defaultScope
     , domainScope
-    , Token, unToken
+    , Token, getToken
     ) where
 
 import Control.Lens hiding ((.=))
-import Control.Monad.Catch (MonadThrow, throwM)
+import Control.Monad.Catch (throwM)
 import Data.Aeson
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as LBS
 import Data.String (IsString)
 import Data.Text (Text)
 import Data.Typeable
@@ -71,15 +70,14 @@ type family TokenRequest (s :: ScopeIdentifier) where
     TokenRequest DefaultScope = DefaultScopeTokenRequest
     TokenRequest DomainScope = DomainScopeTokenRequest
 
-newtype Token (s :: ScopeIdentifier) = Token { unToken :: ByteString }
+newtype Token (s :: ScopeIdentifier) = Token { getToken :: ByteString }
     deriving (Show, Eq, Typeable)
 
 createToken :: Scope s -> POST "/auth/tokens" Anonymous (TokenRequest s) (Token s)
-createToken _ = operation' id getToken
+createToken _ = operation' id getToken'
   where
     header :: IsString a => a
     header = "X-Subject-Token"
-    getToken :: MonadThrow m => W.Response LBS.ByteString -> m (Token s)
-    getToken resp = case resp ^? W.responseHeader header of
+    getToken' resp = case resp ^? W.responseHeader header of
         Nothing -> throwM $ ResponseProcessingError $ "Missing '" ++ header ++ "' header"
         Just bs -> return $ Token bs
