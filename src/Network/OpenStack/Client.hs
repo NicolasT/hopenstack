@@ -17,12 +17,17 @@ module Network.OpenStack.Client (
     , GET, POST, PUT, DELETE
     , URL
     , Handler
+    , ResponseProcessingError(..)
     , operation'
     , operation
     , operationSuffix
     ) where
 
+import Control.Exception.Base (Exception)
 import Control.Lens
+import Control.Monad.Catch (MonadThrow)
+import Data.Aeson
+import Data.ByteString.Lazy (ByteString)
 import Data.Proxy (Proxy(Proxy))
 import Data.Typeable (Typeable)
 import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
@@ -35,13 +40,13 @@ data Authentication = Anonymous | Authenticated
     deriving (Show, Eq, Typeable)
 
 type OptionsProcessor = W.Options -> W.Options
-type ResponseProcessor b = W.Response b -> b
+type ResponseProcessor b = MonadThrow m => W.Response ByteString -> m b
 
 data Operation (m :: Method) (s :: Symbol) (t :: Authentication) a b where
     OGETAnonymous :: OptionsProcessor -> ResponseProcessor b -> Operation 'GET s 'Anonymous () b
     OPOSTAnonymous :: OptionsProcessor -> ResponseProcessor b -> Operation 'POST s 'Anonymous a b
     OPUTAnonymous :: OptionsProcessor -> ResponseProcessor b -> Operation 'PUT s 'Anonymous a b
-    ODELETEAnonymous :: OptionsProcessor -> Operation 'DELETE s 'Anonymous () ()
+    ODELETEAnonymous :: OptionsProcessor -> ResponseProcessor () -> Operation 'DELETE s 'Anonymous () ()
 
 deriving instance Typeable Operation
 
@@ -53,8 +58,8 @@ type DELETE s t = Operation 'DELETE s t () ()
 class OperationClass (m :: Method) (s :: Symbol) (t :: Authentication) a b where
     operation' :: OptionsProcessor -> ResponseProcessor b -> Operation m s t a b
 
-    operation :: Operation m s t a b
-    operation = operation' id (\resp -> resp ^. W.responseBody)
+    operation :: FromJSON b => Operation m s t a b
+    operation = operation' id (\resp -> W.asJSON resp >>= \resp' -> return (resp' ^. W.responseBody))
 
 instance OperationClass 'GET s 'Anonymous () b where
     operation' = OGETAnonymous
@@ -66,8 +71,8 @@ instance OperationClass 'PUT s 'Anonymous a b where
     operation' = OPUTAnonymous
 
 instance OperationClass 'DELETE s 'Anonymous () () where
-    operation' o _ = ODELETEAnonymous o
-    operation = operation' id (const ())
+    operation' = ODELETEAnonymous
+    operation = operation' id (\_ -> return ())
 
 
 type URL = String
@@ -83,3 +88,8 @@ operationSuffix _ = symbolVal (Proxy :: Proxy s)
 
 
 type Handler h t a m b = KnownSymbol s => Operation h s t a b -> OperationCall h t a m b
+
+newtype ResponseProcessingError = ResponseProcessingError String
+    deriving (Show, Eq, Typeable)
+
+instance Exception ResponseProcessingError
